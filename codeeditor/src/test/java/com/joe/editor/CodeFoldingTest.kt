@@ -143,6 +143,11 @@ class CodeFoldingTest {
         assertFalse(state.isLineFolded(0))
         state.toggleFold(0)
         assertTrue(state.isLineFolded(0))
+        assertFalse(state.foldResult.transformedText.contains("val x = 1"))
+        assertEquals(
+            code.count { it == '\n' } - (regions[0].endLine - regions[0].startLine),
+            state.foldResult.transformedText.count { it == '\n' },
+        )
 
         state.toggleFold(0)
         assertFalse(state.isLineFolded(0))

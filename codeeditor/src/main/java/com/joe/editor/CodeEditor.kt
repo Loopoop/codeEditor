@@ -118,12 +118,12 @@ private class SyntaxTransformation(
     private val state: CodeEditorState,
     private val language: Language,
     private val theme: EditorTheme,
+    private val foldResult: FoldResult,
 ) : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
         val s = text.text
-        val foldRes = state.foldResult
-        val foldTransformed = foldRes.transformedText
-        val mapping = foldRes.offsetMapping
+        val foldTransformed = foldResult.transformedText
+        val mapping = foldResult.offsetMapping
 
         val scan = state.scanOf(s, language)
         val tokens = if (state.config.viewportVirtualization) {
@@ -174,7 +174,10 @@ private fun EditorSurface(state: CodeEditorState, theme: EditorTheme) {
             color = theme.gutterText,
         )
     }
-    val syntax = remember(language, theme, state) { SyntaxTransformation(state, language, theme) }
+    val foldResult = state.foldResult
+    val syntax = remember(language, theme, state, foldResult) {
+        SyntaxTransformation(state, language, theme, foldResult)
+    }
 
     val lineCount = state.lineStarts.size
     val digits = max(2, lineCount.toString().length)
