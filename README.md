@@ -120,6 +120,9 @@ state.foldAll()                                // folds all foldable regions in 
 state.unfoldAll()                              // expands all folded regions
 ```
 
+Folded regions track their code when edits add or remove lines elsewhere. Replacing the
+document with `setText` clears folds so they cannot accidentally apply to unrelated code.
+
 ### 6. Semantic Analysis & Custom Linters
 CodeForge includes a built-in semantic analyzer for scope tracking, unused identifier detection, and duplicate symbol checks:
 

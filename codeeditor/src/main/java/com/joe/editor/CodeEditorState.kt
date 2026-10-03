@@ -152,6 +152,7 @@ class CodeEditorState(
     fun setText(newText: String, resetHistory: Boolean = true) {
         value = TextFieldValue(newText, TextRange(0))
         lineStarts = computeLineStarts(newText)
+        foldedLineRanges = emptySet()
         if (resetHistory) { undoStack.clear(); redoStack.clear(); syncHistoryCounts() }
         diagnostics = emptyList()
         dismissCompletion()
@@ -193,10 +194,14 @@ class CodeEditorState(
     }
 
     private fun commit(old: TextFieldValue, new: TextFieldValue, typing: Boolean) {
-        pushUndo(old, new)
-        shiftDiagnostics(old.text, new.text)
+        val change = diff(old.text, new.text)
+        val newLineStarts = computeLineStarts(new.text)
+        val rebasedFolds = rebaseFoldedRanges(change, newLineStarts)
+        pushUndo(old, new, change)
+        shiftDiagnostics(change)
         value = new
-        lineStarts = computeLineStarts(new.text)
+        lineStarts = newLineStarts
+        foldedLineRanges = rebasedFolds
         if (typing) refreshCompletion(false) else dismissCompletion()
     }
 
@@ -396,8 +401,7 @@ class CodeEditorState(
 
     private fun syncHistoryCounts() { undoCount = undoStack.size; redoCount = redoStack.size }
 
-    private fun pushUndo(old: TextFieldValue, new: TextFieldValue) {
-        val d = diff(old.text, new.text)
+    private fun pushUndo(old: TextFieldValue, new: TextFieldValue, d: Diff) {
         val kind = when {
             d.removed == 0 && d.inserted == 1 && new.text.getOrNull(d.start) != '\n' -> 1
             d.removed == 1 && d.inserted == 0 -> 2
@@ -416,9 +420,13 @@ class CodeEditorState(
     }
 
     private fun restore(v: TextFieldValue) {
-        shiftDiagnostics(value.text, v.text)
+        val change = diff(value.text, v.text)
+        val newLineStarts = computeLineStarts(v.text)
+        val rebasedFolds = rebaseFoldedRanges(change, newLineStarts)
+        shiftDiagnostics(change)
         value = v.copy(composition = null)
-        lineStarts = computeLineStarts(v.text)
+        lineStarts = newLineStarts
+        foldedLineRanges = rebasedFolds
         lastKind = 0
         dismissCompletion()
         syncHistoryCounts()
@@ -698,19 +706,21 @@ class CodeEditorState(
             ?: diagnostics.firstOrNull { it.severity == Severity.Error && cursorLine == lineOf(it.start) }
     }
 
-    private fun lineOf(offset: Int): Int {
-        val idx = java.util.Arrays.binarySearch(lineStarts, offset)
-        return if (idx >= 0) idx else -idx - 2
+    private fun lineOf(offset: Int): Int = lineOf(lineStarts, offset)
+
+    private fun lineOf(starts: IntArray, offset: Int): Int {
+        val idx = java.util.Arrays.binarySearch(starts, offset)
+        val line = if (idx >= 0) idx else -idx - 2
+        return line.coerceIn(0, starts.lastIndex)
     }
 
-    private fun shiftDiagnostics(old: String, new: String) {
+    private fun shiftDiagnostics(change: Diff) {
         if (diagnostics.isEmpty()) return
-        val d = diff(old, new)
-        val delta = d.inserted - d.removed
-        val editEnd = d.start + d.removed
+        val delta = change.inserted - change.removed
+        val editEnd = change.start + change.removed
         diagnostics = diagnostics.mapNotNull { g ->
             when {
-                g.end <= d.start -> g
+                g.end <= change.start -> g
                 g.start >= editEnd -> g.copy(start = g.start + delta, end = g.end + delta)
                 else -> null
             }
@@ -748,6 +758,29 @@ class CodeEditorState(
     // ---------------- code folding ----------------
     var foldedLineRanges by mutableStateOf<Set<IntRange>>(emptySet())
         private set
+
+    private fun rebaseFoldedRanges(change: Diff, newLineStarts: IntArray): Set<IntRange> {
+        if (foldedLineRanges.isEmpty() || !config.codeFoldingEnabled) return emptySet()
+        val regions = foldableRegions
+        val delta = change.inserted - change.removed
+        val editEnd = change.start + change.removed
+
+        fun mapOffset(offset: Int): Int = when {
+            offset < change.start -> offset
+            offset >= editEnd -> offset + delta
+            else -> change.start + change.inserted
+        }
+
+        return foldedLineRanges.mapNotNull { range ->
+            val region = regions.firstOrNull {
+                it.startLine == range.first && it.endLine == range.last
+            } ?: return@mapNotNull null
+            val start = lineOf(newLineStarts, mapOffset(region.startOffset))
+            val endOffset = (region.endOffset - 1).coerceAtLeast(region.startOffset)
+            val end = lineOf(newLineStarts, mapOffset(endOffset))
+            if (end > start) start..end else null
+        }.toSet()
+    }
 
     val foldableRegions: List<FoldRegion> by derivedStateOf {
         if (!config.codeFoldingEnabled) emptyList()

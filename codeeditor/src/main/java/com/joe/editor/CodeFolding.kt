@@ -143,44 +143,50 @@ object CodeFolding {
 
         // 4. Indentation-based blocks for unbracketed or indent-sensitive languages
         if (language.pairs.isEmpty() || language.id in setOf("python", "yaml", "shell")) {
-            val lines = text.split('\n')
-            if (lines.size >= 2) {
-                val indents = IntArray(lines.size)
-                val isBlank = BooleanArray(lines.size)
-                for (idx in lines.indices) {
-                    val line = lines[idx]
-                    if (line.trim().isEmpty()) {
-                        isBlank[idx] = true
-                        indents[idx] = 0
-                    } else {
-                        var spaceCount = 0
-                        for (ch in line) {
-                            if (ch == ' ') spaceCount++
-                            else if (ch == '\t') spaceCount += 4
-                            else break
-                        }
-                        indents[idx] = spaceCount
+            data class IndentFrame(val line: Int, val indent: Int)
+
+            val stack = ArrayList<IndentFrame>()
+            val indents = IntArray(lineStarts.size)
+            var previousLine = -1
+
+            fun closeFrame(frame: IndentFrame) {
+                if (previousLine <= frame.line) return
+                if (indents[previousLine] <= frame.indent) return
+                val endOff = if (previousLine + 1 < lineStarts.size) {
+                    lineStarts[previousLine + 1] - 1
+                } else {
+                    textLen
+                }
+                regions.add(FoldRegion(frame.line, previousLine, lineStarts[frame.line], endOff, " ... "))
+            }
+
+            for (line in lineStarts.indices) {
+                val start = lineStarts[line]
+                val end = if (line + 1 < lineStarts.size) lineStarts[line + 1] - 1 else textLen
+                var firstContent = start
+                while (firstContent < end && text[firstContent].isWhitespace()) firstContent++
+                if (firstContent == end) continue
+
+                var indent = 0
+                var offset = start
+                while (offset < end) {
+                    when (text[offset]) {
+                        ' ' -> { indent++; offset++ }
+                        '\t' -> { indent += 4; offset++ }
+                        else -> break
                     }
                 }
 
-                for (i in 0 until lines.size - 1) {
-                    if (isBlank[i]) continue
-                    val baseIndent = indents[i]
-                    var lastDeeper = -1
-                    for (j in i + 1 until lines.size) {
-                        if (isBlank[j]) continue
-                        if (indents[j] > baseIndent) {
-                            lastDeeper = j
-                        } else {
-                            break
-                        }
-                    }
-                    if (lastDeeper > i) {
-                        val startOff = lineStarts[i]
-                        val endOff = if (lastDeeper + 1 < lineStarts.size) lineStarts[lastDeeper + 1] - 1 else textLen
-                        regions.add(FoldRegion(i, lastDeeper, startOff, endOff, " ... "))
-                    }
+                indents[line] = indent
+                while (stack.isNotEmpty() && stack.last().indent >= indent) {
+                    closeFrame(stack.removeAt(stack.lastIndex))
                 }
+                stack.add(IndentFrame(line, indent))
+                previousLine = line
+            }
+
+            while (stack.isNotEmpty()) {
+                closeFrame(stack.removeAt(stack.lastIndex))
             }
         }
 
@@ -222,7 +228,16 @@ object CodeFolding {
         // Build transformed text and offset mapping
         val sb = StringBuilder()
         val origToTrans = IntArray(text.length + 1)
-        var transToOrig = ArrayList<Int>()
+        var transformedLength = text.length
+        var previousEnd = 0
+        for (region in activeRegions) {
+            val start = region.startOffset.coerceIn(previousEnd, text.length)
+            val end = region.endOffset.coerceIn(start, text.length)
+            transformedLength += region.placeholder.length - (end - start)
+            previousEnd = end
+        }
+        val transToOrig = IntArray(transformedLength + 1)
+        var transToOrigSize = 0
 
         var lastOrig = 0
         var currentTrans = 0
@@ -236,7 +251,7 @@ object CodeFolding {
                 sb.append(chunk)
                 for (i in lastOrig until start) {
                     origToTrans[i] = currentTrans + (i - lastOrig)
-                    transToOrig.add(i)
+                    transToOrig[transToOrigSize++] = i
                 }
                 currentTrans += chunk.length
             }
@@ -247,8 +262,8 @@ object CodeFolding {
             for (i in start until end) {
                 origToTrans[i] = currentTrans
             }
-            for (ch in placeholder) {
-                transToOrig.add(start)
+            repeat(placeholder.length) {
+                transToOrig[transToOrigSize++] = start
             }
             currentTrans += placeholder.length
             lastOrig = end
@@ -259,14 +274,13 @@ object CodeFolding {
             sb.append(chunk)
             for (i in lastOrig until text.length) {
                 origToTrans[i] = currentTrans + (i - lastOrig)
-                transToOrig.add(i)
+                transToOrig[transToOrigSize++] = i
             }
             currentTrans += chunk.length
         }
         origToTrans[text.length] = currentTrans
-        transToOrig.add(text.length)
+        transToOrig[transToOrigSize++] = text.length
 
-        val transToOrigArray = transToOrig.toIntArray()
         val transformedText = sb.toString()
 
         val mapping = object : OffsetMapping {
@@ -277,7 +291,7 @@ object CodeFolding {
 
             override fun transformedToOriginal(offset: Int): Int {
                 val clamped = offset.coerceIn(0, transformedText.length)
-                return transToOrigArray[clamped]
+                return transToOrig[clamped]
             }
         }
 

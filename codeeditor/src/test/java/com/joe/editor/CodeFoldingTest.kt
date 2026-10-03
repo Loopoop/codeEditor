@@ -1,5 +1,7 @@
 package com.joe.editor
 
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -53,6 +55,37 @@ class CodeFoldingTest {
     }
 
     @Test
+    fun testFindFoldableRegionsNestedIndentationAndLargeInput() {
+        val code = "root:\n  child:\n    leaf\n  sibling\nnext"
+        val lineStarts = intArrayOf(0, 6, 15, 24, 34)
+        val nested = CodeFolding.findFoldableRegions(
+            code,
+            Languages.Python,
+            Languages.Python.scan(code),
+            lineStarts,
+        )
+        assertTrue(nested.any { it.startLine == 0 && it.endLine == 3 })
+        assertTrue(nested.any { it.startLine == 1 && it.endLine == 2 })
+
+        val largeCode = buildString {
+            append("def root():\n")
+            repeat(4_000) { append("    value").append(it).append('\n') }
+        }
+        val largeLineStarts = IntArray(4_002)
+        var line = 1
+        for (index in largeCode.indices) {
+            if (largeCode[index] == '\n') largeLineStarts[line++] = index + 1
+        }
+        val largeRegions = CodeFolding.findFoldableRegions(
+            largeCode,
+            Languages.Python,
+            Languages.Python.scan(largeCode),
+            largeLineStarts,
+        )
+        assertTrue(largeRegions.any { it.startLine == 0 && it.endLine == 4_000 })
+    }
+
+    @Test
     fun testCreateFoldResultOffsetMapping() {
         val text = "line0\nline1\nline2\nline3"
         val lineStarts = intArrayOf(0, 6, 12, 18)
@@ -68,6 +101,16 @@ class CodeFoldingTest {
 
         // Transformed back to original
         assertEquals(0, result.offsetMapping.transformedToOriginal(0))
+        assertEquals(6, result.offsetMapping.originalToTransformed(6))
+        assertEquals(9, result.offsetMapping.originalToTransformed(17))
+        assertEquals(17, result.offsetMapping.transformedToOriginal(9))
+        for (offset in 1..text.length) {
+            assertTrue(
+                "Offset mapping must remain monotonic",
+                result.offsetMapping.originalToTransformed(offset) >=
+                    result.offsetMapping.originalToTransformed(offset - 1),
+            )
+        }
     }
 
     @Test
@@ -111,5 +154,26 @@ class CodeFoldingTest {
         state.unfoldAll()
         assertFalse(state.isLineFolded(0))
         assertFalse(state.isLineFolded(4))
+    }
+
+    @Test
+    fun testFoldedRegionTracksEditsAndUndo() {
+        val code = "fun first() {\n  a()\n}\nfun second() {\n  b()\n}"
+        val state = CodeEditorState(code, Languages.Kotlin)
+        state.toggleFold(3)
+        assertTrue(state.isLineFolded(3))
+
+        val changed = "// header\n$code"
+        state.onValueChange(TextFieldValue(changed, TextRange(10)))
+        assertTrue(state.isLineFolded(4))
+        assertTrue(state.foldResult.transformedText.contains("{ ... }"))
+        assertFalse(state.foldResult.transformedText.contains("b()"))
+
+        state.undo()
+        assertTrue(state.isLineFolded(3))
+        assertTrue(state.foldResult.transformedText.contains("{ ... }"))
+
+        state.setText(code, resetHistory = false)
+        assertFalse(state.isLineFolded(3))
     }
 }

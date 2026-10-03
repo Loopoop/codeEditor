@@ -333,10 +333,11 @@ private fun DrawScope.drawGutter(
     }
 
     val layoutLineCount = layout.lineCount
-    for (vl in 0 until layoutLineCount) {
+    val firstVisibleLine = layout.getLineForVerticalPosition(top.coerceAtLeast(0f))
+        .coerceIn(0, layoutLineCount - 1)
+    for (vl in firstVisibleLine until layoutLineCount) {
         val y = layout.getLineTop(vl)
         val lineH = layout.getLineBottom(vl) - y
-        if (y + lineH < top) continue
         if (y > bottom) break
 
         val transStart = layout.getLineStart(vl)
