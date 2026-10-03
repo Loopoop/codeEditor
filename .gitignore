@@ -1,0 +1,37 @@
+# Gradle files
+.gradle/
+build/
+*/build/
+
+# Kotlin / IDE
+.kotlin/
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navState.xml
+.idea/assetWizardSettings.xml
+.idea/shelf/
+*.iml
+*.ipr
+*.iws
+
+# Android Studio / Local build
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+output.json
+
+# Signing & Keystores
+*.jks
+*.keystore
+
+# Logs & Temporary files
+*.log
+*.hprof
+.DS_Store
+Thumbs.db
+
+# CodeForge artifacts
+.artifacts/
