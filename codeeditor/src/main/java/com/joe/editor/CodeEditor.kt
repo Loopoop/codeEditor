@@ -65,7 +65,6 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -201,8 +200,10 @@ private fun EditorSurface(state: CodeEditorState, theme: EditorTheme) {
         // keep the caret visible after edits / navigation
         LaunchedEffect(state.revealTick) {
             val layout = state.textLayout ?: return@LaunchedEffect
-            val off = state.value.selection.end.coerceIn(0, max(0, layout.layoutInput.text.length))
-            val r = layout.getCursorRect(off)
+            val origOff = state.value.selection.end.coerceIn(0, state.value.text.length)
+            val transOff = state.foldResult.offsetMapping.originalToTransformed(origOff)
+            val clamped = transOff.coerceIn(0, max(0, layout.layoutInput.text.length))
+            val r = layout.getCursorRect(clamped)
             val top = vScroll.value
             val lh = with(density) { lineHeightSp.toPx() }
             if (r.top < top) vScroll.scrollTo(max(0, (r.top - lh).toInt()))
@@ -229,9 +230,14 @@ private fun EditorSurface(state: CodeEditorState, theme: EditorTheme) {
                         .pointerInput(Unit) {
                             detectTapGestures { offset ->
                                 val layout = state.textLayout ?: return@detectTapGestures
-                                val line = layout.getLineForVerticalPosition(offset.y)
-                                if (state.isLineFoldStart(line)) {
-                                    state.toggleFold(line)
+                                val vl = layout.getLineForVerticalPosition(offset.y)
+                                if (vl in 0 until layout.lineCount) {
+                                    val transStart = layout.getLineStart(vl)
+                                    val origStart = state.foldResult.offsetMapping.transformedToOriginal(transStart)
+                                    val origLine = lineOfOffset(state.lineStarts, origStart)
+                                    if (state.isLineFoldStart(origLine)) {
+                                        state.toggleFold(origLine)
+                                    }
                                 }
                             }
                         },
@@ -296,8 +302,10 @@ private fun Canvas2(modifier: Modifier, onDraw: DrawScope.() -> Unit) {
 // ---------------------------------------------------------------------------------------------
 
 private fun lineOfOffset(starts: IntArray, offset: Int): Int {
+    if (starts.isEmpty()) return 0
     val idx = java.util.Arrays.binarySearch(starts, offset)
-    return if (idx >= 0) idx else -idx - 2
+    val ln = if (idx >= 0) idx else -idx - 2
+    return ln.coerceIn(0, starts.size - 1)
 }
 
 private fun DrawScope.drawGutter(
@@ -311,10 +319,12 @@ private fun DrawScope.drawGutter(
 ) {
     val layout = state.textLayout ?: return
     val starts = state.lineStarts
-    val textLen = layout.layoutInput.text.length
+    val textLen = state.value.text.length
     val top = scrollY.toFloat()
     val bottom = top + viewportH
     val cursorLine = state.cursorLine
+    val mapping = state.foldResult.offsetMapping
+
     val diagLines = HashMap<Int, Severity>()
     for (d in state.diagnostics) {
         val ln = lineOfOffset(starts, d.start.coerceIn(0, textLen))
@@ -322,24 +332,19 @@ private fun DrawScope.drawGutter(
         if (prev == null || d.severity.ordinal < prev.ordinal) diagLines[ln] = d.severity
     }
 
-    // first logical line whose bottom is below the viewport top
-    var lo = 0
-    var hi = starts.size - 1
-    while (lo < hi) {
-        val mid = (lo + hi) ushr 1
-        val off = (if (mid + 1 < starts.size) starts[mid + 1] - 1 else textLen).coerceIn(0, textLen)
-        val bot = layout.getLineBottom(layout.getLineForOffset(off))
-        if (bot < top) lo = mid + 1 else hi = mid
-    }
-    var i = lo
-    while (i < starts.size) {
-        val off = starts[i].coerceIn(0, textLen)
-        val vl = layout.getLineForOffset(off)
+    val layoutLineCount = layout.lineCount
+    for (vl in 0 until layoutLineCount) {
         val y = layout.getLineTop(vl)
-        if (y > bottom) break
         val lineH = layout.getLineBottom(vl) - y
-        val active = i == cursorLine
-        val label = (i + 1).toString()
+        if (y + lineH < top) continue
+        if (y > bottom) break
+
+        val transStart = layout.getLineStart(vl)
+        val origStart = mapping.transformedToOriginal(transStart)
+        val origLine = lineOfOffset(starts, origStart)
+
+        val active = origLine == cursorLine
+        val label = (origLine + 1).toString()
         val m = measurer.measure(
             label,
             style.copy(color = if (active) theme.gutterActiveText else theme.gutterText),
@@ -348,12 +353,14 @@ private fun DrawScope.drawGutter(
         )
         val x = size.width - m.size.width - 10.dp.toPx()
         drawText(m, topLeft = Offset(x, y + (lineH - m.size.height) / 2f))
-        val sev = diagLines[i]
+
+        val sev = diagLines[origLine]
         if (sev != null) {
             drawCircle(theme.severityColor(sev), radius = 3.dp.toPx(), center = Offset(6.dp.toPx(), y + lineH / 2f))
         }
-        if (state.config.codeFoldingEnabled && state.isLineFoldStart(i)) {
-            val foldIcon = if (state.isLineFolded(i)) "▶" else "▼"
+
+        if (state.config.codeFoldingEnabled && state.isLineFoldStart(origLine)) {
+            val foldIcon = if (state.isLineFolded(origLine)) "▶" else "▼"
             val fm = measurer.measure(
                 foldIcon,
                 style.copy(color = theme.gutterActiveText, fontSize = style.fontSize * 0.8f),
@@ -361,7 +368,6 @@ private fun DrawScope.drawGutter(
             )
             drawText(fm, topLeft = Offset(14.dp.toPx(), y + (lineH - fm.size.height) / 2f))
         }
-        i++
     }
 }
 
@@ -373,18 +379,21 @@ private fun DrawScope.drawEditorOverlays(
     @Suppress("UNUSED_PARAMETER") version: Int,
 ) {
     val layout: TextLayoutResult = state.textLayout ?: return
-    val textLen = layout.layoutInput.text.length
+    val textLen = state.value.text.length
     val starts = state.lineStarts
     val top = scrollY.toFloat()
     val bottom = top + viewportH
+    val mapping = state.foldResult.offsetMapping
+    val transLen = layout.layoutInput.text.length
 
     // current line
     if (state.config.highlightCurrentLine && state.value.selection.collapsed && starts.isNotEmpty()) {
         val ln = state.cursorLine.coerceIn(0, starts.size - 1)
         val s = starts[ln].coerceIn(0, textLen)
-        val e = (if (ln + 1 < starts.size) starts[ln + 1] - 1 else textLen).coerceIn(0, textLen)
-        val y1 = layout.getLineTop(layout.getLineForOffset(s))
-        val y2 = layout.getLineBottom(layout.getLineForOffset(e))
+        val transS = mapping.originalToTransformed(s).coerceIn(0, transLen)
+        val vl = layout.getLineForOffset(transS)
+        val y1 = layout.getLineTop(vl)
+        val y2 = layout.getLineBottom(vl)
         drawRect(theme.currentLine, topLeft = Offset(0f, y1), size = Size(size.width, y2 - y1))
     }
 
@@ -395,11 +404,12 @@ private fun DrawScope.drawEditorOverlays(
         state.searchMatches.forEachIndexed { idx, r ->
             if (drawn > 400) return@forEachIndexed
             if (r.first >= textLen) return@forEachIndexed
-            val y = layout.getLineTop(layout.getLineForOffset(r.first))
+            val transStart = mapping.originalToTransformed(r.first).coerceIn(0, transLen)
+            val transEnd = mapping.originalToTransformed(min(r.last + 1, textLen)).coerceIn(0, transLen)
+            if (transEnd <= transStart) return@forEachIndexed
+            val y = layout.getLineTop(layout.getLineForOffset(transStart))
             if (y > bottom || y < top - 400f) return@forEachIndexed
-            val end = min(r.last + 1, textLen)
-            if (end <= r.first) return@forEachIndexed
-            drawPath(layout.getPathForRange(r.first, end), if (idx == current) theme.searchActive else theme.searchMatch)
+            drawPath(layout.getPathForRange(transStart, transEnd), if (idx == current) theme.searchActive else theme.searchMatch)
             drawn++
         }
     }
@@ -408,7 +418,8 @@ private fun DrawScope.drawEditorOverlays(
     state.bracketPair?.let { (a, b) ->
         for (idx in intArrayOf(a, b)) {
             if (idx < 0 || idx >= textLen) continue
-            val box = layout.getBoundingBox(idx)
+            val transIdx = mapping.originalToTransformed(idx).coerceIn(0, transLen)
+            val box = layout.getBoundingBox(transIdx)
             drawRect(theme.bracketMatch, topLeft = box.topLeft, size = box.size)
         }
     }
@@ -421,14 +432,17 @@ private fun DrawScope.drawEditorOverlays(
         var e = d.end.coerceIn(0, textLen)
         if (e <= s) e = min(textLen, s + 1)
         if (e <= s) continue
-        val firstLine = layout.getLineForOffset(s)
-        val lastLine = layout.getLineForOffset(e)
+        val transS = mapping.originalToTransformed(s).coerceIn(0, transLen)
+        val transE = mapping.originalToTransformed(e).coerceIn(0, transLen)
+        if (transE <= transS) continue
+        val firstLine = layout.getLineForOffset(transS)
+        val lastLine = layout.getLineForOffset(transE)
         val color = theme.severityColor(d.severity)
         for (vl in firstLine..lastLine) {
             val y = layout.getLineBottom(vl) - 2.dp.toPx()
             if (y < top || y - 200f > bottom) continue
-            val segStart = max(s, layout.getLineStart(vl))
-            val segEnd = min(e, layout.getLineEnd(vl, visibleEnd = true))
+            val segStart = max(transS, layout.getLineStart(vl))
+            val segEnd = min(transE, layout.getLineEnd(vl, visibleEnd = true))
             if (segEnd <= segStart) continue
             val x1 = layout.getHorizontalPosition(segStart, true)
             val x2 = layout.getHorizontalPosition(segEnd, true)

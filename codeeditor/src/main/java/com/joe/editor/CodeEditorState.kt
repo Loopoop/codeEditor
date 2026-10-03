@@ -75,7 +75,6 @@ class CodeEditorState(
 
     internal fun onLayout(r: TextLayoutResult) {
         textLayout = r
-        lineStarts = computeLineStarts(r.layoutInput.text.text)
         contentHeightPx = r.size.height
         layoutVersion++
     }
@@ -419,6 +418,7 @@ class CodeEditorState(
     private fun restore(v: TextFieldValue) {
         shiftDiagnostics(value.text, v.text)
         value = v.copy(composition = null)
+        lineStarts = computeLineStarts(v.text)
         lastKind = 0
         dismissCompletion()
         syncHistoryCounts()

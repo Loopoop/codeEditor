@@ -45,8 +45,10 @@ object CodeFolding {
 
         // Helper to convert offset to line
         fun lineOf(offset: Int): Int {
-            val idx = java.util.Arrays.binarySearch(lineStarts, offset)
-            return if (idx >= 0) idx else -idx - 2
+            val clamped = offset.coerceIn(0, textLen)
+            val idx = java.util.Arrays.binarySearch(lineStarts, clamped)
+            val ln = if (idx >= 0) idx else -idx - 2
+            return ln.coerceIn(0, lineStarts.size - 1)
         }
 
         // 1. Bracket pairs e.g. { ... }, [ ... ] spanning multiple lines
@@ -139,6 +141,49 @@ object CodeFolding {
             }
         }
 
+        // 4. Indentation-based blocks for unbracketed or indent-sensitive languages
+        if (language.pairs.isEmpty() || language.id in setOf("python", "yaml", "shell")) {
+            val lines = text.split('\n')
+            if (lines.size >= 2) {
+                val indents = IntArray(lines.size)
+                val isBlank = BooleanArray(lines.size)
+                for (idx in lines.indices) {
+                    val line = lines[idx]
+                    if (line.trim().isEmpty()) {
+                        isBlank[idx] = true
+                        indents[idx] = 0
+                    } else {
+                        var spaceCount = 0
+                        for (ch in line) {
+                            if (ch == ' ') spaceCount++
+                            else if (ch == '\t') spaceCount += 4
+                            else break
+                        }
+                        indents[idx] = spaceCount
+                    }
+                }
+
+                for (i in 0 until lines.size - 1) {
+                    if (isBlank[i]) continue
+                    val baseIndent = indents[i]
+                    var lastDeeper = -1
+                    for (j in i + 1 until lines.size) {
+                        if (isBlank[j]) continue
+                        if (indents[j] > baseIndent) {
+                            lastDeeper = j
+                        } else {
+                            break
+                        }
+                    }
+                    if (lastDeeper > i) {
+                        val startOff = lineStarts[i]
+                        val endOff = if (lastDeeper + 1 < lineStarts.size) lineStarts[lastDeeper + 1] - 1 else textLen
+                        regions.add(FoldRegion(i, lastDeeper, startOff, endOff, " ... "))
+                    }
+                }
+            }
+        }
+
         // Remove duplicates/overlaps and sort by startLine
         return regions.distinctBy { it.startLine to it.endLine }.sortedBy { it.startLine }
     }
@@ -156,12 +201,22 @@ object CodeFolding {
             return FoldResult(text, OffsetMapping.Identity, emptySet())
         }
 
-        val activeRegions = allRegions.filter { reg ->
+        val candidateRegions = allRegions.filter { reg ->
             activeFoldedRanges.any { it.first == reg.startLine && it.last == reg.endLine }
         }.sortedBy { it.startOffset }
 
-        if (activeRegions.isEmpty()) {
+        if (candidateRegions.isEmpty()) {
             return FoldResult(text, OffsetMapping.Identity, emptySet())
+        }
+
+        // Filter out nested/overlapping active regions to prevent corrupting offsets
+        val activeRegions = ArrayList<FoldRegion>()
+        var maxEnd = -1
+        for (reg in candidateRegions) {
+            if (reg.startOffset >= maxEnd) {
+                activeRegions.add(reg)
+                maxEnd = reg.endOffset
+            }
         }
 
         // Build transformed text and offset mapping

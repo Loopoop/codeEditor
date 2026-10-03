@@ -38,27 +38,37 @@ object ViewportVirtualization {
         var firstLine = 0
         var lastLine = totalLines - 1
 
-        if (textLayout != null) {
-            // Use precise TextLayoutResult line tops/bottoms
+        if (textLayout != null && textLayout.lineCount > 0) {
+            // Use precise TextLayoutResult line tops/bottoms on visual lines
+            val layoutLineCount = textLayout.lineCount
             var lo = 0
-            var hi = totalLines - 1
+            var hi = layoutLineCount - 1
             while (lo < hi) {
                 val mid = (lo + hi) ushr 1
-                val off = lineStarts[mid].coerceIn(0, textLength)
-                val vl = textLayout.getLineForOffset(off)
-                if (textLayout.getLineBottom(vl) < top) lo = mid + 1 else hi = mid
+                if (textLayout.getLineBottom(mid) < top) lo = mid + 1 else hi = mid
             }
-            firstLine = max(0, lo - bufferLines)
+            val firstVl = max(0, lo)
 
-            lo = firstLine
-            hi = totalLines - 1
+            lo = firstVl
+            hi = layoutLineCount - 1
             while (lo < hi) {
                 val mid = (lo + hi) ushr 1
-                val off = lineStarts[mid].coerceIn(0, textLength)
-                val vl = textLayout.getLineForOffset(off)
-                if (textLayout.getLineTop(vl) > bottom) hi = mid else lo = mid + 1
+                if (textLayout.getLineTop(mid) > bottom) hi = mid else lo = mid + 1
             }
-            lastLine = min(totalLines - 1, lo + bufferLines)
+            val lastVl = min(layoutLineCount - 1, lo)
+
+            val transStart = textLayout.getLineStart(firstVl)
+            val transEnd = textLayout.getLineEnd(lastVl, visibleEnd = true)
+
+            fun lineOf(offset: Int): Int {
+                val clamped = offset.coerceIn(0, textLength)
+                val idx = java.util.Arrays.binarySearch(lineStarts, clamped)
+                val ln = if (idx >= 0) idx else -idx - 2
+                return ln.coerceIn(0, lineStarts.size - 1)
+            }
+
+            firstLine = max(0, lineOf(transStart) - bufferLines)
+            lastLine = min(totalLines - 1, lineOf(transEnd) + bufferLines)
         } else {
             // Fallback estimation
             val estLineHeight = 30f
