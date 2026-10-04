@@ -74,9 +74,14 @@ class CodeEditorState(
         private set
 
     internal fun onLayout(r: TextLayoutResult) {
+        val layoutChanged = textLayout?.let {
+            it.size != r.size || it.layoutInput != r.layoutInput
+        } ?: true
         textLayout = r
-        contentHeightPx = r.size.height
-        layoutVersion++
+        // This is measurement bookkeeping only. It must never be fed back
+        // into BasicTextField's constraints.
+        if (contentHeightPx != r.size.height) contentHeightPx = r.size.height
+        if (layoutChanged) layoutVersion++
     }
 
     private fun computeLineStarts(s: String): IntArray {

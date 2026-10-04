@@ -34,7 +34,7 @@ afterEvaluate {
                 from(components["release"])
                 groupId = "com.github.joe"
                 artifactId = "codeforge-editor"
-                version = "1.0.3"
+                version = "1.0.4"
             }
         }
     }

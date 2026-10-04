@@ -13,7 +13,7 @@ An Ace-style code editor for Jetpack Compose. Pure Kotlin, no WebView.
 dependencyResolutionManagement { repositories { maven("https://jitpack.io") } }
 
 // app/build.gradle.kts
-implementation("com.github.<your-github-user>:CodeForge:1.0.0")
+implementation("com.github.Loopoop:CodeForge:main-SNAPSHOT")
 ```
 
 Or include the `:codeeditor` module directly: `include(":codeeditor")` and `implementation(project(":codeeditor"))`.
@@ -37,6 +37,7 @@ CodeEditor(
 ## Detailed Usage Guide
 
 ### 1. State Management & Content Updates
+
 ```kotlin
 // Reading and replacing content
 val currentText = state.text
@@ -53,6 +54,7 @@ state.typeText("// inserted header\n") // inserts text at caret position
 ```
 
 ### 2. Configuration (`EditorConfig`)
+
 Customize behavior, fonts, indentation, and performance settings:
 
 ```kotlin
@@ -82,6 +84,7 @@ state.config = state.config.copy(
 ```
 
 ### 3. Themes
+
 Built-in themes: `Darcula`, `OneDark`, `Monokai`, `Dracula`, `GitHubLight`.
 
 ```kotlin
@@ -94,6 +97,7 @@ CodeEditor(
 ```
 
 ### 4. Programmatic Find & Replace
+
 ```kotlin
 state.openSearch(replace = true)               // opens find & replace bar
 state.searchQuery = "oldFunction"
@@ -107,6 +111,7 @@ state.closeSearch()
 ```
 
 ### 5. Code Folding API
+
 Code folding automatically supports bracket blocks (`{ ... }`, `[ ... ]`), HTML/XML tags (`<tag> ... </tag>`), block comments (`/* ... */`), and indentation blocks:
 
 ```kotlin
@@ -124,6 +129,7 @@ Folded regions track their code when edits add or remove lines elsewhere. Replac
 document with `setText` clears folds so they cannot accidentally apply to unrelated code.
 
 ### 6. Semantic Analysis & Custom Linters
+
 CodeForge includes a built-in semantic analyzer for scope tracking, unused identifier detection, and duplicate symbol checks:
 
 ```kotlin
@@ -143,6 +149,7 @@ state.diagnosticsProvider = DiagnosticsProvider { text, language ->
 ```
 
 ### 7. Connecting to a Language Server (LSP)
+
 Use `StandardLspClient` to connect CodeForge to an external Language Server binary (Kotlin, Rust Analyzer, gopls, Pyright, etc.):
 
 ```kotlin
@@ -161,6 +168,7 @@ state.completionProvider = LspCompletionProvider(lspClient, "file:///path/to/pro
 ```
 
 ### 8. Custom Languages
+
 ```kotlin
 val Toml = codeLanguage(
     id = "toml", name = "TOML", extensions = listOf("toml"),
@@ -176,49 +184,56 @@ Languages.register(Toml)
 
 ## Keyboard Shortcuts
 
-| Shortcut | Action |
-|---|---|
-| **Ctrl/Cmd + Z** | Undo |
-| **Ctrl/Cmd + Shift + Z / Ctrl/Cmd + Y** | Redo |
-| **Ctrl/Cmd + F** | Open Find |
-| **Ctrl/Cmd + H** | Open Find & Replace |
-| **Ctrl/Cmd + / ** | Toggle comment |
-| **Ctrl/Cmd + D** | Duplicate line(s) |
-| **Ctrl/Cmd + Shift + K** | Delete line(s) |
-| **Ctrl/Cmd + Space** | Trigger completion |
-| **Ctrl/Cmd + [ / ]** | Outdent / Indent |
-| **Ctrl/Cmd + Shift + [ / ]** | Fold / Unfold current block |
-| **Alt + ↑ / ↓** | Move line(s) up / down |
-| **Tab / Shift + Tab** | Indent / Outdent |
+| Shortcut                                | Action                      |
+| --------------------------------------- | --------------------------- |
+| **Ctrl/Cmd + Z**                        | Undo                        |
+| **Ctrl/Cmd + Shift + Z / Ctrl/Cmd + Y** | Redo                        |
+| **Ctrl/Cmd + F**                        | Open Find                   |
+| **Ctrl/Cmd + H**                        | Open Find & Replace         |
+| **Ctrl/Cmd + / **                       | Toggle comment              |
+| **Ctrl/Cmd + D**                        | Duplicate line(s)           |
+| **Ctrl/Cmd + Shift + K**                | Delete line(s)              |
+| **Ctrl/Cmd + Space**                    | Trigger completion          |
+| **Ctrl/Cmd + [ / ]**                    | Outdent / Indent            |
+| **Ctrl/Cmd + Shift + [ / ]**            | Fold / Unfold current block |
+| **Alt + ↑ / ↓**                         | Move line(s) up / down      |
+| **Tab / Shift + Tab**                   | Indent / Outdent            |
 
 ---
 
 ## Troubleshooting Guide
 
 ### 1. Performance & Large File Rendering
+
 - **Symptom:** Editor stutters or delays when typing in large files (10,000+ lines).
 - **Solution:** Ensure `viewportVirtualization = true` in `EditorConfig`. Verify that `maxHighlightLength` is kept within reasonable limits (default `400_000` chars). For files exceeding `largeFileThreshold` (2,000 lines), CodeForge automatically uses incremental token scanning and viewport line clipping.
 
 ### 2. Caret / Text Misalignment
+
 - **Symptom:** Selection highlights, cursor position, or line numbers appear horizontally shifted.
 - **Solution:** Always set `fontFamily` in `EditorConfig` to a monospaced font family (e.g., `FontFamily.Monospace` or a custom monospaced `FontFamily`). Proportional fonts (like Arial or Roboto) cause character measurement mismatch.
 
 ### 3. Code Folding Icons Not Showing in Gutter
+
 - **Symptom:** Chevron `▼` / `▶` icons do not appear in the gutter.
 - **Solution:** Check that `config.showLineNumbers = true` and `config.codeFoldingEnabled = true`. Folding icons appear on lines where multi-line brackets (`{ ... }`, `[ ... ]`), tags, or block comments begin.
 
 ### 4. Diagnostics Squiggles / Error Warnings Not Displayed
+
 - **Symptom:** Red/yellow squiggles or error icons do not render under code.
 - **Solution:** Ensure `config.diagnosticsEnabled = true`. Note that diagnostics run with a slight debounce (`config.diagnosticsDelayMs`, default 300ms) to preserve typing fluidness. If using custom `diagnosticsProvider`, ensure it returns valid 0-indexed character offsets within `0..text.length`.
 
 ### 5. Keyboard Events Intercepted / Soft Keyboard Conflicts
+
 - **Symptom:** Hardware keyboard shortcuts (like Ctrl+Z or Tab) do not trigger when focused.
 - **Solution:** Call `state.requestFocus()` when the editor is displayed. CodeForge handles preview key events via Compose `onPreviewKeyEvent`. Make sure outer parent layouts do not consume key events before reaching `CodeEditor`.
 
 ### 6. Auto-Completion Popup Clipped on Mobile Screens
+
 - **Symptom:** The caret completion popup extends beyond screen edges on small devices.
 - **Solution:** Set `config = config.copy(completionStyle = CompletionStyle.Bar)` when running on small screen form factors. This displays completions in a scrollable mobile-optimized bottom bar instead of a caret popup.
 
 ### 7. LSP Diagnostics or Completion Requests Hanging
+
 - **Symptom:** LSP diagnostics or completions fail to populate.
 - **Solution:** Ensure the LSP background process streams (`InputStream` and `OutputStream`) are open and unblocked. Always call `lspClient.initialize()` before sending document sync commands (`didOpen` / `didChange`).

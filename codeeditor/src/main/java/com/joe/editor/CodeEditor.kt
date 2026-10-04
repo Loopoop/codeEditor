@@ -82,8 +82,6 @@ import androidx.compose.ui.window.PopupProperties
 import kotlin.math.max
 import kotlin.math.min
 
-private const val MAX_EDITOR_CONTENT_HEIGHT_PX = 262_143
-
 /**
  * A full-featured code editor: syntax highlighting, line numbers, auto-indent, auto-close,
  * completion, diagnostics, find/replace, undo/redo, bracket matching and a mobile symbol bar.
@@ -190,10 +188,16 @@ private fun EditorSurface(state: CodeEditorState, theme: EditorTheme) {
     BoxWithConstraints(Modifier.fillMaxSize().clipToBounds()) {
         val viewportW = constraints.maxWidth
         val viewportH = constraints.maxHeight
-        val contentHeightPx = (
-            state.contentHeightPx.toLong() + with(density) { 160.dp.roundToPx() }
-        ).coerceAtMost(MAX_EDITOR_CONTENT_HEIGHT_PX.toLong()).toInt()
-        val contentHeightDp = with(density) { contentHeightPx.toDp() }
+        // Keep the field at least as tall as the viewport. Do not derive this
+        // from state.contentHeightPx: onTextLayout is called while measuring
+        // BasicTextField, so doing so creates a measure -> state -> remeasure
+        // feedback loop.
+        val viewportHeightDp = with(density) { viewportH.toDp() }
+        // The gutter follows the measured text, but it is not used to size
+        // BasicTextField, so it cannot feed the measurement back into state.
+        val gutterHeightDp = with(density) {
+            max(viewportH, state.contentHeightPx).toDp()
+        }
 
         // gutter background sits behind the scrolling content so it never moves horizontally
         if (config.showLineNumbers) {
@@ -234,7 +238,7 @@ private fun EditorSurface(state: CodeEditorState, theme: EditorTheme) {
                 Canvas2(
                     Modifier
                         .width(gutterWidth)
-                        .height(contentHeightDp)
+                        .heightIn(min = gutterHeightDp)
                         .pointerInput(Unit) {
                             detectTapGestures { offset ->
                                 val layout = state.textLayout ?: return@detectTapGestures
@@ -282,7 +286,7 @@ private fun EditorSurface(state: CodeEditorState, theme: EditorTheme) {
                                 if (config.wordWrap) it.fillMaxWidth().padding(end = 8.dp)
                                 else it.widthIn(min = minW.coerceAtLeast(0.dp)).padding(end = 48.dp)
                             }
-                            .heightIn(min = contentHeightDp)
+                            .heightIn(min = viewportHeightDp)
                             .focusRequester(state.focusRequester)
                             .drawBehind {
                                 drawEditorOverlays(state, theme, vScroll.value, viewportH, state.layoutVersion)
