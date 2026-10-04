@@ -82,6 +82,8 @@ import androidx.compose.ui.window.PopupProperties
 import kotlin.math.max
 import kotlin.math.min
 
+private const val MAX_EDITOR_CONTENT_HEIGHT_PX = 262_143
+
 /**
  * A full-featured code editor: syntax highlighting, line numbers, auto-indent, auto-close,
  * completion, diagnostics, find/replace, undo/redo, bracket matching and a mobile symbol bar.
@@ -188,7 +190,10 @@ private fun EditorSurface(state: CodeEditorState, theme: EditorTheme) {
     BoxWithConstraints(Modifier.fillMaxSize().clipToBounds()) {
         val viewportW = constraints.maxWidth
         val viewportH = constraints.maxHeight
-        val contentHeightDp = with(density) { state.contentHeightPx.toDp() } + 160.dp
+        val contentHeightPx = (
+            state.contentHeightPx.toLong() + with(density) { 160.dp.roundToPx() }
+        ).coerceAtMost(MAX_EDITOR_CONTENT_HEIGHT_PX.toLong()).toInt()
+        val contentHeightDp = with(density) { contentHeightPx.toDp() }
 
         // gutter background sits behind the scrolling content so it never moves horizontally
         if (config.showLineNumbers) {
