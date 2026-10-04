@@ -1,8 +1,10 @@
 # CodeForge
 
+[![](https://jitpack.io/v/Loopoop/codeEditor.svg)](https://jitpack.io/#Loopoop/codeEditor)
+
 An Ace-style code editor for Jetpack Compose. Pure Kotlin, no WebView.
 
-**Languages (26):** Kotlin, Gradle (KTS + Groovy), Java, JavaScript, TypeScript, JSON, HTML, XML, CSS/SCSS/Less, PHP, Rust, Go, C, C++, C#, Python, Swift, Dart, Ruby, Lua, Shell, SQL, YAML, Markdown, plain text.
+**Languages (36):** Kotlin, Gradle (KTS + Groovy), Java, JavaScript, TypeScript, JSON, TOML, HTML, XML, CSS/SCSS/Less, PHP, Rust, Go, C, C++, C#, Python, Swift, Dart, Ruby, Lua, Shell, SQL, YAML, Markdown, R, Julia, Haskell, Scala, Elixir, Erlang, PowerShell, Perl, Nix, plain text.
 
 **Features:** syntax highlighting, line numbers, code folding, built-in semantic analysis & LSP bridge, viewport virtualization, auto-indent, auto-close brackets/quotes/HTML tags, smart backspace, completion (keywords, snippets, document words, scope symbols), error/warning squiggles (bracket, tag, JSON and semantic scope checks), bracket matching, find & replace (regex, case, whole word), undo/redo, comment toggle, duplicate/move/delete line, 5 themes, mobile symbol bar, hardware-keyboard shortcuts.
 

@@ -174,6 +174,82 @@ object Languages {
         literals = w("true false null"), stringQuotes = "\"", stringKeys = true, typeHeuristic = false, operators = "",
     )
 
+    private val tomlSpec = LanguageSpec(
+        literals = w("true false"), lineComments = listOf("#"), stringQuotes = "\"'",
+        stringKeys = true, typeHeuristic = false, operators = "=.,+-[]{}",
+    )
+
+    private val rSpec = LanguageSpec(
+        keywords = w("if else repeat while function for in next break TRUE FALSE NULL Inf NaN NA"),
+        types = w("logical integer numeric complex character raw list expression environment data.frame factor matrix"),
+        builtins = w("library require source print paste sprintf c seq rep length nrow ncol names summary lm plot"),
+        literals = w("TRUE FALSE NULL Inf NaN NA"), lineComments = listOf("#"),
+        stringQuotes = "\"'", operators = OPS,
+    )
+
+    private val juliaSpec = LanguageSpec(
+        keywords = w("baremodule begin break catch const continue do else elseif end export finally for function global if import let local macro module quote return struct try using while mutable struct where primitive type abstract primitive"),
+        types = w("Int Int8 Int16 Int32 Int64 UInt UInt8 UInt16 UInt32 UInt64 Float16 Float32 Float64 Bool Char String Symbol Vector Matrix Tuple NamedTuple Dict Set Nothing Missing Any"),
+        builtins = w("println print length size push! pop! map filter reduce collect range zeros ones rand"),
+        literals = w("true false nothing missing"), lineComments = listOf("#"),
+        blockComments = listOf("#=" to "=#"), nestedBlockComments = true,
+        multilineQuotes = listOf("\"\"\""), operators = OPS,
+    )
+
+    private val haskellSpec = LanguageSpec(
+        keywords = w("as case class data default deriving do else hiding if import in infix infixl infixr instance let module newtype of qualified then type where foreign forall mdo family role stock standalone via"),
+        types = w("Int Integer Float Double Bool Char String Maybe Either IO Ordering Eq Ord Show Read Num Integral Real Fractional"),
+        builtins = w("map filter foldr foldl print putStrLn length head tail null concat zip curry uncurry"),
+        literals = w("True False Nothing Just Left Right"), lineComments = listOf("--"),
+        blockComments = listOf("{-" to "-}"), nestedBlockComments = true,
+        stringQuotes = "\"'", operators = OPS,
+    )
+
+    private val scalaSpec = LanguageSpec(
+        keywords = w("abstract case catch class def do else extends final finally for forSome if implicit import lazy match new null object override package private protected return sealed super this throw trait try type val var while with yield given using enum opaque extension inline infix open transparent"),
+        types = w("Int Long Short Byte Float Double Boolean Char String Unit Any AnyVal AnyRef Nothing Null Option List Seq Map Set Future"),
+        builtins = w("println print require assert Some None Left Right"), literals = w("true false null"),
+        lineComments = listOf("//"), blockComments = SLASH_COMMENTS, nestedBlockComments = true,
+        multilineQuotes = listOf("\"\"\""), annotationPrefix = '@', operators = OPS,
+    )
+
+    private val elixirSpec = LanguageSpec(
+        keywords = w("after alias and case catch cond def defdelegate defexception defimpl defmacro defmodule defp defprotocol defstruct defguard defguardp do else end fn for if import in not or quote raise receive require rescue try unless use when with xor") ,
+        types = w("Atom BitString Binary Integer Float List Map Tuple PID Port Reference Function"),
+        builtins = w("IO Enum Stream Map Keyword String Agent GenServer Task Supervisor"),
+        literals = w("true false nil"), lineComments = listOf("#"),
+        stringQuotes = "\"'", multilineQuotes = listOf("\"\"\""), operators = OPS,
+    )
+
+    private val erlangSpec = LanguageSpec(
+        keywords = w("after begin case cond end fun if let of catch receive try when maybe else"),
+        builtins = w("module export import spawn self receive io lists maps proplists gen_server supervisor"),
+        literals = w("true false undefined"), lineComments = listOf("%"),
+        stringQuotes = "\"'", operators = OPS,
+    )
+
+    private val powershellSpec = LanguageSpec(
+        keywords = w("begin break catch class continue data define do dynamicparam else elseif end enum exit filter finally for foreach from function if in param process return static switch throw trap try until using var while workflow"),
+        types = w("bool byte char datetime decimal double int int16 int32 int64 long object pscustomobject regex scriptblock single string uint uint16 uint32 uint64 ulong"),
+        builtins = w("Write-Host Write-Output Write-Error Get-Item Get-ChildItem Set-Location Get-Content Set-Content New-Item Remove-Item Where-Object ForEach-Object Select-Object"),
+        literals = w("true false null"), lineComments = listOf("#"), blockComments = listOf("<#" to "#>"),
+        stringQuotes = "\"'", variablePrefix = '$', operators = OPS,
+    )
+
+    private val perlSpec = LanguageSpec(
+        keywords = w("if elsif else unless while until for foreach continue do sub my our local state use package require return die eval given when default next last redo print say"),
+        types = w("scalar array hash filehandle"), builtins = w("map grep split join sort push pop shift unshift keys values exists defined length chomp"),
+        literals = w("true false undef"), lineComments = listOf("#"), variablePrefix = '$',
+        stringQuotes = "\"'`", operators = OPS,
+    )
+
+    private val nixSpec = LanguageSpec(
+        keywords = w("assert builtins else if in inherit let or rec then with"),
+        builtins = w("abort baseNameOf concatLists elemAt fetchGit fetchurl filter hasAttr import isAttrs isList isString mapAttrs mkDerivation nixpkgs pkgs throw toString"),
+        literals = w("true false null"), lineComments = listOf("#"), blockComments = listOf("/*" to "*/"),
+        stringQuotes = "\"'", operators = OPS,
+    )
+
     // ---------- languages ----------
     val PlainText = Language("plaintext", "Plain Text", listOf("txt", "text", "log"), checkBrackets = false)
 
@@ -215,6 +291,8 @@ object Languages {
         indentUnit = "  ", snippets = JavaScript.snippets + sn("interface", "interface", "interface $0 {\n\t\n}"))
     val Json = codeLanguage("json", "JSON", listOf("json", "geojson", "webmanifest"), jsonSpec,
         indentUnit = "  ", lineComment = null, blockComment = null, quotePairs = "\"")
+    val Toml = codeLanguage("toml", "TOML", listOf("toml"), tomlSpec,
+        indentUnit = "  ", lineComment = "#", blockComment = null, quotePairs = "\"'")
     val Html = Language(
         "html", "HTML", listOf("html", "htm", "xhtml", "vue", "svelte"),
         blockComment = "<!--" to "-->", indentUnit = "  ", indentAfter = emptySet(), pairs = NO_PAIRS,
@@ -303,10 +381,20 @@ object Languages {
         "markdown", "Markdown", listOf("md", "markdown"), blockComment = "<!--" to "-->",
         indentUnit = "  ", indentAfter = emptySet(), checkBrackets = false, scanner = MarkdownScanner::scan,
     )
+    val R = codeLanguage("r", "R", listOf("r", "rdata", "rds"), rSpec, indentUnit = "  ")
+    val Julia = codeLanguage("julia", "Julia", listOf("jl"), juliaSpec, indentUnit = "  ")
+    val Haskell = codeLanguage("haskell", "Haskell", listOf("hs", "lhs"), haskellSpec, indentUnit = "  ")
+    val Scala = codeLanguage("scala", "Scala", listOf("scala", "sc"), scalaSpec, indentUnit = "  ")
+    val Elixir = codeLanguage("elixir", "Elixir", listOf("ex", "exs"), elixirSpec, indentUnit = "  ")
+    val Erlang = codeLanguage("erlang", "Erlang", listOf("erl", "hrl"), erlangSpec, indentUnit = "  ")
+    val PowerShell = codeLanguage("powershell", "PowerShell", listOf("ps1", "psm1", "psd1"), powershellSpec, indentUnit = "  ")
+    val Perl = codeLanguage("perl", "Perl", listOf("pl", "pm", "t"), perlSpec, indentUnit = "  ")
+    val Nix = codeLanguage("nix", "Nix", listOf("nix"), nixSpec, indentUnit = "  ")
 
     private val registry = mutableListOf(
-        PlainText, Kotlin, GradleKts, Groovy, Java, JavaScript, TypeScript, Json, Html, Xml, Css, Php, Rust, Go,
-        C, Cpp, CSharp, Python, Swift, Dart, Ruby, Lua, Shell, Sql, Yaml, Markdown,
+        PlainText, Kotlin, GradleKts, Groovy, Java, JavaScript, TypeScript, Json, Toml, Html, Xml, Css, Php, Rust, Go,
+        C, Cpp, CSharp, Python, Swift, Dart, Ruby, Lua, Shell, Sql, Yaml, Markdown, R, Julia, Haskell, Scala,
+        Elixir, Erlang, PowerShell, Perl, Nix,
     )
 
     val all: List<Language> get() = registry
@@ -324,8 +412,10 @@ object Languages {
     }
 
     fun forFileName(fileName: String): Language {
-        val n = fileName.substringAfterLast('/').lowercase()
+        val n = fileName.substringAfterLast('/').substringAfterLast('\\').lowercase()
         if (n.endsWith(".gradle.kts")) return GradleKts
+        if (n == "dockerfile" || n.startsWith("dockerfile.")) return Shell
+        if (n == "makefile" || n == "gnumakefile") return Shell
         return forExtension(n.substringAfterLast('.', "")) ?: PlainText
     }
 }
